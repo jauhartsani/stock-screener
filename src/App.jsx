@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Upload, TrendingUp, TrendingDown, AlertCircle, Database, BarChart3 } from 'lucide-react';
 
 // KONFIGURASI SUPABASE - ISI DENGAN CREDENTIALS ANDA
-const SUPABASE_URL = 'https://avzhlgddnalfhpeqsvgz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2emhsZ2RkbmFsZmhwZXFzdmd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3MDM0MzcsImV4cCI6MjA3OTI3OTQzN30.C9TZU5uUlnHhDXSfLhgVN77NZI3Cnmc-QOvegVS8qYk';
+const SUPABASE_URL = 'https://your-project.supabase.co';
+const SUPABASE_ANON_KEY = 'your-anon-key-here';
 
 const StockAccumulationTracker = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -54,16 +54,22 @@ const StockAccumulationTracker = () => {
 
   // Parse CSV data
   const parseCSV = (text) => {
-    const lines = text.split('\n');
-    const headers = lines[0].split('\t').map(h => h.trim());
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim());
     const data = [];
 
     for (let i = 1; i < lines.length; i++) {
       if (lines[i].trim()) {
-        const values = lines[i].split('\t');
+        // Split by comma but handle quoted values
+        const values = lines[i].match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
         const row = {};
         headers.forEach((header, index) => {
-          row[header] = values[index]?.trim() || '';
+          let value = values[index]?.trim() || '';
+          // Remove quotes if present
+          value = value.replace(/^"|"$/g, '');
+          row[header] = value;
         });
         data.push(row);
       }
@@ -71,33 +77,74 @@ const StockAccumulationTracker = () => {
     return data;
   };
 
+  // Parse Excel file using FileReader
+  const parseExcel = async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+          resolve(jsonData);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   // Upload data ke Supabase
   const uploadToSupabase = async (stocks, date) => {
     try {
       const supabase = getSupabaseClient();
-      const records = stocks.map(stock => ({
-        kode_saham: stock['Kode Saham'],
-        nama_perusahaan: stock['Nama Perusahaan'],
-        tanggal: date,
-        open_price: parseFloat(stock['Open Price']?.replace(/,/g, '') || 0),
-        penutupan: parseFloat(stock['Penutupan']?.replace(/,/g, '') || 0),
-        tertinggi: parseFloat(stock['Tertinggi']?.replace(/,/g, '') || 0),
-        terendah: parseFloat(stock['Terendah']?.replace(/,/g, '') || 0),
-        volume: parseFloat(stock['Volume']?.replace(/,/g, '') || 0),
-        foreign_buy: parseFloat(stock['Foreign Buy']?.replace(/,/g, '') || 0),
-        foreign_sell: parseFloat(stock['Foreign Sell']?.replace(/,/g, '') || 0),
-        foreign_net: parseFloat(stock['Foreign Buy']?.replace(/,/g, '') || 0) - parseFloat(stock['Foreign Sell']?.replace(/,/g, '') || 0)
-      }));
+      const records = stocks.map(stock => {
+        // Parse tanggal dengan format "28 Nov 2025"
+        let tanggal = date;
+        if (stock['Tanggal Perdagangan Terakhir']) {
+          try {
+            const dateStr = stock['Tanggal Perdagangan Terakhir'];
+            const dateObj = new Date(dateStr);
+            if (!isNaN(dateObj.getTime())) {
+              tanggal = dateObj.toISOString().split('T')[0];
+            }
+          } catch (e) {
+            console.log('Error parsing date:', e);
+          }
+        }
+
+        return {
+          kode_saham: stock['Kode Saham'] || '',
+          nama_perusahaan: stock['Nama Perusahaan'] || '',
+          tanggal: tanggal,
+          open_price: parseFloat((stock['Open Price'] || '0').toString().replace(/,/g, '')) || 0,
+          penutupan: parseFloat((stock['Penutupan'] || '0').toString().replace(/,/g, '')) || 0,
+          tertinggi: parseFloat((stock['Tertinggi'] || '0').toString().replace(/,/g, '')) || 0,
+          terendah: parseFloat((stock['Terendah'] || '0').toString().replace(/,/g, '')) || 0,
+          volume: parseFloat((stock['Volume'] || '0').toString().replace(/,/g, '')) || 0,
+          foreign_buy: parseFloat((stock['Foreign Buy'] || '0').toString().replace(/,/g, '')) || 0,
+          foreign_sell: parseFloat((stock['Foreign Sell'] || '0').toString().replace(/,/g, '')) || 0,
+          foreign_net: (parseFloat((stock['Foreign Buy'] || '0').toString().replace(/,/g, '')) || 0) - 
+                       (parseFloat((stock['Foreign Sell'] || '0').toString().replace(/,/g, '')) || 0)
+        };
+      }).filter(record => record.kode_saham); // Filter out empty records
+
+      if (records.length === 0) {
+        throw new Error('Tidak ada data valid untuk diupload');
+      }
 
       const { data, error } = await supabase
         .from('stock_data')
         .upsert(records, { onConflict: 'kode_saham,tanggal' });
 
       if (error) throw error;
-      return true;
+      return records.length;
     } catch (error) {
       console.error('Error uploading to Supabase:', error);
-      return false;
+      throw error;
     }
   };
 
@@ -210,19 +257,56 @@ const StockAccumulationTracker = () => {
     const files = Array.from(e.target.files);
     setLoading(true);
 
-    for (const file of files) {
-      const text = await file.text();
-      const stocks = parseCSV(text);
+    try {
+      let successCount = 0;
+      let totalRecords = 0;
+
+      for (const file of files) {
+        try {
+          let stocks = [];
+          
+          // Check file extension
+          const fileName = file.name.toLowerCase();
+          
+          if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+            // Parse Excel file
+            stocks = await parseExcel(file);
+          } else {
+            // Parse CSV file
+            const text = await file.text();
+            stocks = parseCSV(text);
+          }
+
+          if (stocks.length === 0) {
+            console.warn(`File ${file.name} tidak memiliki data`);
+            continue;
+          }
+          
+          // Extract date from filename or use current date
+          const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
+          const date = dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0];
+
+          const recordCount = await uploadToSupabase(stocks, date);
+          successCount++;
+          totalRecords += recordCount;
+          
+          console.log(`✓ ${file.name}: ${recordCount} records uploaded`);
+        } catch (fileError) {
+          console.error(`Error processing ${file.name}:`, fileError);
+          alert(`Error pada file ${file.name}: ${fileError.message}`);
+        }
+      }
+
+      setUploadedFiles(prev => [...prev, ...files.map(f => f.name)]);
       
-      // Extract date from filename or use current date
-      const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
-      const date = dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0];
-
-      await uploadToSupabase(stocks, date);
+      if (successCount > 0) {
+        alert(`Berhasil upload ${successCount} file dengan total ${totalRecords} records!`);
+      }
+    } catch (error) {
+      console.error('Error in file upload:', error);
+      alert('Error saat upload: ' + error.message);
     }
-
-    setUploadedFiles(prev => [...prev, ...files.map(f => f.name)]);
-    alert('Data berhasil diupload!');
+    
     setLoading(false);
   };
 
@@ -336,13 +420,14 @@ const StockAccumulationTracker = () => {
                 <p className="mb-2 text-lg text-slate-300">
                   <span className="font-semibold">Klik untuk upload</span> atau drag & drop
                 </p>
-                <p className="text-sm text-slate-400">CSV/TSV files (dapat upload multiple files)</p>
+                <p className="text-sm text-slate-400">CSV atau Excel files (.csv, .xlsx, .xls)</p>
+                <p className="text-xs text-slate-500 mt-2">Format: No,Kode Saham,Nama Perusahaan,...,Foreign Buy,Foreign Sell</p>
               </div>
               <input
                 type="file"
                 className="hidden"
                 multiple
-                accept=".csv,.tsv,.txt"
+                accept=".csv,.xlsx,.xls,.txt"
                 onChange={handleFileUpload}
                 disabled={loading}
               />
