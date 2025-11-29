@@ -9,6 +9,7 @@ const StockAccumulationTracker = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [accumulationStocks, setAccumulationStocks] = useState([]);
   const [distributionStocks, setDistributionStocks] = useState([]);
+  const [masterData, setMasterData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
 
@@ -146,6 +147,27 @@ const StockAccumulationTracker = () => {
       console.error('Error uploading to Supabase:', error);
       throw error;
     }
+  };
+
+  // Fetch master data
+  const fetchMasterData = async () => {
+    setLoading(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: stockData, error } = await supabase
+        .from('stock_data')
+        .select('*')
+        .order('tanggal', { ascending: false })
+        .limit(5000);
+
+      if (error) throw error;
+
+      setMasterData(stockData || []);
+    } catch (error) {
+      console.error('Error fetching master data:', error);
+      alert('Error saat mengambil data: ' + error.message);
+    }
+    setLoading(false);
   };
 
   // Analisis akumulasi dan distribusi
@@ -301,6 +323,8 @@ const StockAccumulationTracker = () => {
       
       if (successCount > 0) {
         alert(`Berhasil upload ${successCount} file dengan total ${totalRecords} records!`);
+        // Auto refresh master data setelah upload
+        await fetchMasterData();
       }
     } catch (error) {
       console.error('Error in file upload:', error);
@@ -453,6 +477,75 @@ const StockAccumulationTracker = () => {
             >
               {loading ? 'Menganalisis...' : 'Analisis Data Saham'}
             </button>
+          </div>
+        )}
+
+        {/* Master Data Tab */}
+        {activeTab === 'master' && (
+          <div className="bg-slate-800 rounded-xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Database className="w-8 h-8 text-blue-400" />
+                <h2 className="text-2xl font-bold text-white">Master Data</h2>
+              </div>
+              <button
+                onClick={fetchMasterData}
+                disabled={loading}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold transition-all disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+
+            {masterData.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                Belum ada data. Upload data terlebih dahulu.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs uppercase bg-slate-700 text-slate-300">
+                    <tr>
+                      <th className="px-4 py-3">Tanggal</th>
+                      <th className="px-4 py-3">Kode</th>
+                      <th className="px-4 py-3">Nama Perusahaan</th>
+                      <th className="px-4 py-3">Open</th>
+                      <th className="px-4 py-3">High</th>
+                      <th className="px-4 py-3">Low</th>
+                      <th className="px-4 py-3">Close</th>
+                      <th className="px-4 py-3">Volume</th>
+                      <th className="px-4 py-3">Foreign Buy</th>
+                      <th className="px-4 py-3">Foreign Sell</th>
+                      <th className="px-4 py-3">Foreign Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {masterData.slice(0, 100).map((record, idx) => (
+                      <tr key={idx} className="border-b border-slate-700 hover:bg-slate-700/50">
+                        <td className="px-4 py-3 text-slate-300">{formatDate(record.tanggal)}</td>
+                        <td className="px-4 py-3 text-white font-semibold">{record.kode_saham}</td>
+                        <td className="px-4 py-3 text-slate-300 max-w-xs truncate">{record.nama_perusahaan}</td>
+                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.open_price)}</td>
+                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.tertinggi)}</td>
+                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.terendah)}</td>
+                        <td className="px-4 py-3 text-white font-semibold">{formatNumber(record.penutupan)}</td>
+                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.volume)}</td>
+                        <td className="px-4 py-3 text-green-400">{formatNumber(record.foreign_buy)}</td>
+                        <td className="px-4 py-3 text-red-400">{formatNumber(record.foreign_sell)}</td>
+                        <td className={`px-4 py-3 font-semibold ${record.foreign_net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {record.foreign_net >= 0 ? '+' : ''}{formatNumber(record.foreign_net)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {masterData.length > 100 && (
+                  <div className="text-center mt-4 text-slate-400 text-sm">
+                    Menampilkan 100 dari {masterData.length} records
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
