@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Upload, TrendingUp, TrendingDown, AlertCircle, Database, BarChart3 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
-// KONFIGURASI SUPABASE - ISI DENGAN CREDENTIALS ANDA
-const SUPABASE_URL = 'https://avzhlgddnalfhpeqsvgz.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2emhsZ2RkbmFsZmhwZXFzdmd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3MDM0MzcsImV4cCI6MjA3OTI3OTQzN30.C9TZU5uUlnHhDXSfLhgVN77NZI3Cnmc-QOvegVS8qYk';
+// Neon database akan diambil dari environment variables Netlify
+// NETLIFY_DATABASE_URL sudah otomatis tersedia setelah install Neon extension
 
 const StockAccumulationTracker = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -13,45 +13,8 @@ const StockAccumulationTracker = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
 
-  // Supabase client function
-  const getSupabaseClient = () => {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('your-project')) {
-      throw new Error('Supabase belum dikonfigurasi. Silakan update SUPABASE_URL dan SUPABASE_ANON_KEY di kode.');
-    }
-    
-    return {
-      from: (table) => ({
-        select: (columns) => ({
-          order: (col, opts) => ({
-            limit: async (lim) => {
-              const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${columns}&order=${col}.${opts.ascending ? 'asc' : 'desc'}&limit=${lim}`, {
-                headers: {
-                  'apikey': SUPABASE_ANON_KEY,
-                  'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                }
-              });
-              const data = await response.json();
-              return { data, error: response.ok ? null : data };
-            }
-          })
-        }),
-        upsert: async (records, opts) => {
-          const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-            method: 'POST',
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify(records)
-          });
-          const data = response.ok ? await response.json() : await response.text();
-          return { data, error: response.ok ? null : data };
-        }
-      })
-    };
-  };
+  // API endpoint untuk Netlify Functions
+  const API_BASE = '/.netlify/functions';
 
   // Parse CSV data
   const parseCSV = (text) => {
@@ -63,12 +26,10 @@ const StockAccumulationTracker = () => {
 
     for (let i = 1; i < lines.length; i++) {
       if (lines[i].trim()) {
-        // Split by comma but handle quoted values
         const values = lines[i].match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g) || [];
         const row = {};
         headers.forEach((header, index) => {
           let value = values[index]?.trim() || '';
-          // Remove quotes if present
           value = value.replace(/^"|"$/g, '');
           row[header] = value;
         });
@@ -78,7 +39,7 @@ const StockAccumulationTracker = () => {
     return data;
   };
 
-  // Parse Excel file using FileReader
+  // Parse Excel file
   const parseExcel = async (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -98,12 +59,10 @@ const StockAccumulationTracker = () => {
     });
   };
 
-  // Upload data ke Supabase
-  const uploadToSupabase = async (stocks, date) => {
+  // Upload data ke Neon via Netlify Function
+  const uploadToDatabase = async (stocks, date) => {
     try {
-      const supabase = getSupabaseClient();
       const records = stocks.map(stock => {
-        // Parse tanggal dengan format "28 Nov 2025"
         let tanggal = date;
         if (stock['Tanggal Perdagangan Terakhir']) {
           try {
@@ -131,20 +90,29 @@ const StockAccumulationTracker = () => {
           foreign_net: (parseFloat((stock['Foreign Buy'] || '0').toString().replace(/,/g, '')) || 0) - 
                        (parseFloat((stock['Foreign Sell'] || '0').toString().replace(/,/g, '')) || 0)
         };
-      }).filter(record => record.kode_saham); // Filter out empty records
+      }).filter(record => record.kode_saham);
 
       if (records.length === 0) {
         throw new Error('Tidak ada data valid untuk diupload');
       }
 
-      const { data, error } = await supabase
-        .from('stock_data')
-        .upsert(records, { onConflict: 'kode_saham,tanggal' });
+      const response = await fetch(`${API_BASE}/upload-stocks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ records })
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed');
+      }
+
       return records.length;
     } catch (error) {
-      console.error('Error uploading to Supabase:', error);
+      console.error('Error uploading to database:', error);
       throw error;
     }
   };
@@ -153,16 +121,14 @@ const StockAccumulationTracker = () => {
   const fetchMasterData = async () => {
     setLoading(true);
     try {
-      const supabase = getSupabaseClient();
-      const { data: stockData, error } = await supabase
-        .from('stock_data')
-        .select('*')
-        .order('tanggal', { ascending: false })
-        .limit(5000);
+      const response = await fetch(`${API_BASE}/get-stocks?limit=5000`);
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch data');
+      }
 
-      if (error) throw error;
-
-      setMasterData(stockData || []);
+      setMasterData(result.data || []);
     } catch (error) {
       console.error('Error fetching master data:', error);
       alert('Error saat mengambil data: ' + error.message);
@@ -174,14 +140,14 @@ const StockAccumulationTracker = () => {
   const analyzeStocks = async () => {
     setLoading(true);
     try {
-      const supabase = getSupabaseClient();
-      const { data: stockData, error } = await supabase
-        .from('stock_data')
-        .select('*')
-        .order('tanggal', { ascending: false })
-        .limit(1000);
+      const response = await fetch(`${API_BASE}/get-stocks?limit=1000`);
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch data');
+      }
 
-      if (error) throw error;
+      const stockData = result.data || [];
 
       // Group by kode saham
       const groupedStocks = {};
@@ -210,7 +176,7 @@ const StockAccumulationTracker = () => {
           if (records[i].foreign_net > 0) {
             if (accDays === 0) accStartDate = records[i].tanggal;
             accDays++;
-            totalAccNet += records[i].foreign_net;
+            totalAccNet += parseFloat(records[i].foreign_net);
           } else {
             if (accDays >= 5) break;
             accDays = 0;
@@ -239,7 +205,7 @@ const StockAccumulationTracker = () => {
           if (records[i].foreign_net < 0) {
             if (distDays === 0) distStartDate = records[i].tanggal;
             distDays++;
-            totalDistNet += records[i].foreign_net;
+            totalDistNet += parseFloat(records[i].foreign_net);
           } else {
             if (distDays >= 2) break;
             distDays = 0;
@@ -260,7 +226,6 @@ const StockAccumulationTracker = () => {
         }
       });
 
-      // Sort berdasarkan total net dan jumlah hari
       accumulation.sort((a, b) => b.total_net - a.total_net);
       distribution.sort((a, b) => a.total_net - b.total_net);
 
@@ -286,15 +251,11 @@ const StockAccumulationTracker = () => {
       for (const file of files) {
         try {
           let stocks = [];
-          
-          // Check file extension
           const fileName = file.name.toLowerCase();
           
           if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-            // Parse Excel file
             stocks = await parseExcel(file);
           } else {
-            // Parse CSV file
             const text = await file.text();
             stocks = parseCSV(text);
           }
@@ -304,11 +265,10 @@ const StockAccumulationTracker = () => {
             continue;
           }
           
-          // Extract date from filename or use current date
           const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
           const date = dateMatch ? dateMatch[1] : new Date().toISOString().split('T')[0];
 
-          const recordCount = await uploadToSupabase(stocks, date);
+          const recordCount = await uploadToDatabase(stocks, date);
           successCount++;
           totalRecords += recordCount;
           
@@ -323,7 +283,6 @@ const StockAccumulationTracker = () => {
       
       if (successCount > 0) {
         alert(`Berhasil upload ${successCount} file dengan total ${totalRecords} records!`);
-        // Auto refresh master data setelah upload
         await fetchMasterData();
       }
     } catch (error) {
@@ -360,6 +319,9 @@ const StockAccumulationTracker = () => {
           <p className="text-blue-200 text-lg">
             Analisis pola pembelian dan penjualan investor asing
           </p>
+          <p className="text-blue-300 text-sm mt-2">
+            Powered by Neon Database + Netlify
+          </p>
         </div>
 
         {/* Setup Notice */}
@@ -367,25 +329,7 @@ const StockAccumulationTracker = () => {
           <div className="flex gap-3">
             <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div className="text-yellow-100 text-sm">
-              <strong>Setup Database:</strong> Pastikan sudah update SUPABASE_URL dan SUPABASE_ANON_KEY di kode, lalu buat tabel di Supabase dengan SQL berikut:
-              <pre className="mt-2 p-2 bg-slate-800 rounded text-xs overflow-x-auto">
-{`CREATE TABLE stock_data (
-  id BIGSERIAL PRIMARY KEY,
-  kode_saham VARCHAR(10) NOT NULL,
-  nama_perusahaan TEXT,
-  tanggal DATE NOT NULL,
-  open_price NUMERIC,
-  penutupan NUMERIC,
-  tertinggi NUMERIC,
-  terendah NUMERIC,
-  volume BIGINT,
-  foreign_buy BIGINT,
-  foreign_sell BIGINT,
-  foreign_net BIGINT,
-  created_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(kode_saham, tanggal)
-);`}
-              </pre>
+              <strong>Setup Required:</strong> Install Neon extension di Netlify dan deploy Netlify Functions. Lihat dokumentasi lengkap di bawah.
             </div>
           </div>
         </div>
@@ -402,6 +346,20 @@ const StockAccumulationTracker = () => {
           >
             <Upload className="w-5 h-5 inline mr-2" />
             Upload Data
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('master');
+              if (masterData.length === 0) fetchMasterData();
+            }}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'master'
+                ? 'bg-blue-500 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <Database className="w-5 h-5 inline mr-2" />
+            Master Data ({masterData.length})
           </button>
           <button
             onClick={() => setActiveTab('accumulation')}
