@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Upload, TrendingUp, TrendingDown, AlertCircle, Database, BarChart3 } from 'lucide-react';
 
 // KONFIGURASI SUPABASE - ISI DENGAN CREDENTIALS ANDA
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key-here';
+const SUPABASE_URL = 'https://avzhlgddnalfhpeqsvgz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2emhsZ2RkbmFsZmhwZXFzdmd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3MDM0MzcsImV4cCI6MjA3OTI3OTQzN30.C9TZU5uUlnHhDXSfLhgVN77NZI3Cnmc-QOvegVS8qYk';
 
 const StockAccumulationTracker = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
