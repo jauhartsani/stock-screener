@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
 import { Upload, TrendingUp, TrendingDown, AlertCircle, Database, BarChart3 } from 'lucide-react';
 
+// KONFIGURASI SUPABASE - ISI DENGAN CREDENTIALS ANDA
+const SUPABASE_URL = 'https://avzhlgddnalfhpeqsvgz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2emhsZ2RkbmFsZmhwZXFzdmd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3MDM0MzcsImV4cCI6MjA3OTI3OTQzN30.C9TZU5uUlnHhDXSfLhgVN77NZI3Cnmc-QOvegVS8qYk';
+
 const StockAccumulationTracker = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [accumulationStocks, setAccumulationStocks] = useState([]);
   const [distributionStocks, setDistributionStocks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
-  const [supabaseUrl, setSupabaseUrl] = useState('');
-  const [supabaseKey, setSupabaseKey] = useState('');
-  const [isConfigured, setIsConfigured] = useState(false);
 
   // Supabase client function
   const getSupabaseClient = () => {
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase belum dikonfigurasi');
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('your-project')) {
+      throw new Error('Supabase belum dikonfigurasi. Silakan update SUPABASE_URL dan SUPABASE_ANON_KEY di kode.');
     }
     
     return {
@@ -22,10 +23,10 @@ const StockAccumulationTracker = () => {
         select: (columns) => ({
           order: (col, opts) => ({
             limit: async (lim) => {
-              const response = await fetch(`${supabaseUrl}/rest/v1/${table}?select=${columns}&order=${col}.${opts.ascending ? 'asc' : 'desc'}&limit=${lim}`, {
+              const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${columns}&order=${col}.${opts.ascending ? 'asc' : 'desc'}&limit=${lim}`, {
                 headers: {
-                  'apikey': supabaseKey,
-                  'Authorization': `Bearer ${supabaseKey}`
+                  'apikey': SUPABASE_ANON_KEY,
+                  'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
                 }
               });
               const data = await response.json();
@@ -34,11 +35,11 @@ const StockAccumulationTracker = () => {
           })
         }),
         upsert: async (records, opts) => {
-          const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+          const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
             method: 'POST',
             headers: {
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
               'Content-Type': 'application/json',
               'Prefer': 'resolution=merge-duplicates'
             },
@@ -102,11 +103,6 @@ const StockAccumulationTracker = () => {
 
   // Analisis akumulasi dan distribusi
   const analyzeStocks = async () => {
-    if (!isConfigured) {
-      alert('Silakan konfigurasi Supabase terlebih dahulu!');
-      return;
-    }
-
     setLoading(true);
     try {
       const supabase = getSupabaseClient();
@@ -211,11 +207,6 @@ const StockAccumulationTracker = () => {
 
   // Handle file upload
   const handleFileUpload = async (e) => {
-    if (!isConfigured) {
-      alert('Silakan konfigurasi Supabase terlebih dahulu!');
-      return;
-    }
-
     const files = Array.from(e.target.files);
     setLoading(true);
 
@@ -233,15 +224,6 @@ const StockAccumulationTracker = () => {
     setUploadedFiles(prev => [...prev, ...files.map(f => f.name)]);
     alert('Data berhasil diupload!');
     setLoading(false);
-  };
-
-  const handleConfigSave = () => {
-    if (!supabaseUrl || !supabaseKey) {
-      alert('Mohon isi semua field konfigurasi!');
-      return;
-    }
-    setIsConfigured(true);
-    alert('Konfigurasi Supabase berhasil disimpan!');
   };
 
   const formatNumber = (num) => {
@@ -272,53 +254,12 @@ const StockAccumulationTracker = () => {
           </p>
         </div>
 
-        {/* Configuration Section */}
-        {!isConfigured && (
-          <div className="bg-slate-800 rounded-xl p-6 shadow-2xl mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Database className="w-6 h-6 text-blue-400" />
-              <h2 className="text-xl font-bold text-white">Konfigurasi Supabase</h2>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-slate-300 mb-2 text-sm">Supabase URL</label>
-                <input
-                  type="text"
-                  placeholder="https://xxxx.supabase.co"
-                  value={supabaseUrl}
-                  onChange={(e) => setSupabaseUrl(e.target.value)}
-                  className="w-full bg-slate-700 text-white px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-slate-300 mb-2 text-sm">Supabase Anon Key</label>
-                <input
-                  type="password"
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  value={supabaseKey}
-                  onChange={(e) => setSupabaseKey(e.target.value)}
-                  className="w-full bg-slate-700 text-white px-4 py-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <button
-                onClick={handleConfigSave}
-                className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-all"
-              >
-                Simpan Konfigurasi
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Setup Notice */}
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-6">
           <div className="flex gap-3">
             <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div className="text-yellow-100 text-sm">
-              <strong>Setup Database:</strong> Buat tabel di Supabase dengan SQL berikut:
+              <strong>Setup Database:</strong> Pastikan sudah update SUPABASE_URL dan SUPABASE_ANON_KEY di kode, lalu buat tabel di Supabase dengan SQL berikut:
               <pre className="mt-2 p-2 bg-slate-800 rounded text-xs overflow-x-auto">
 {`CREATE TABLE stock_data (
   id BIGSERIAL PRIMARY KEY,
@@ -403,7 +344,7 @@ const StockAccumulationTracker = () => {
                 multiple
                 accept=".csv,.tsv,.txt"
                 onChange={handleFileUpload}
-                disabled={loading || !isConfigured}
+                disabled={loading}
               />
             </label>
 
@@ -422,7 +363,7 @@ const StockAccumulationTracker = () => {
 
             <button
               onClick={analyzeStocks}
-              disabled={loading || !isConfigured}
+              disabled={loading}
               className="w-full mt-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:from-blue-600 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Menganalisis...' : 'Analisis Data Saham'}
