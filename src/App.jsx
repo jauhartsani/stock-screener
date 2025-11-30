@@ -220,7 +220,7 @@ const StockAccumulationTracker = () => {
           new Date(b.tanggal) - new Date(a.tanggal)
         );
 
-        // Cek akumulasi (5 hari berturut-turut foreign_net positif)
+        // Cek akumulasi (3 hari berturut-turut foreign_net positif)
         let accDays = 0;
         let accStartDate = null;
         let totalAccNet = 0;
@@ -231,7 +231,7 @@ const StockAccumulationTracker = () => {
             accDays++;
             totalAccNet += parseFloat(records[i].foreign_net);
           } else {
-            if (accDays >= 5) break;
+            if (accDays >= 3) break;
             accDays = 0;
             totalAccNet = 0;
           }
@@ -615,7 +615,7 @@ const StockAccumulationTracker = () => {
             <div className="flex items-center gap-3 mb-6">
               <TrendingUp className="w-8 h-8 text-green-400" />
               <h2 className="text-2xl font-bold text-white">
-                Saham dalam Akumulasi Asing (≥5 Hari)
+                Saham dalam Akumulasi Asing (≥3 Hari)
               </h2>
             </div>
 
