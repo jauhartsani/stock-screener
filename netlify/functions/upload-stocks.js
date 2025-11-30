@@ -1,9 +1,22 @@
-import { neon } from '@netlify/neon';
+const { neon } = require('@neondatabase/serverless');
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
+  // Set CORS headers
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+
+  // Handle preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
+      headers,
       body: JSON.stringify({ error: 'Method not allowed' })
     };
   }
@@ -14,14 +27,21 @@ export const handler = async (event) => {
     if (!records || !Array.isArray(records)) {
       return {
         statusCode: 400,
+        headers,
         body: JSON.stringify({ error: 'Invalid data format' })
       };
     }
 
-    // Connect to Neon - otomatis pakai NETLIFY_DATABASE_URL
-    const sql = neon();
+    // Get DATABASE_URL from environment
+    const databaseUrl = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL;
+    
+    if (!databaseUrl) {
+      throw new Error('Database URL not configured');
+    }
 
-    // Insert records with ON CONFLICT DO UPDATE
+    const sql = neon(databaseUrl);
+
+    // Insert records
     for (const record of records) {
       await sql`
         INSERT INTO stock_data (
@@ -50,6 +70,7 @@ export const handler = async (event) => {
 
     return {
       statusCode: 200,
+      headers,
       body: JSON.stringify({ 
         success: true, 
         count: records.length 
@@ -59,6 +80,7 @@ export const handler = async (event) => {
     console.error('Error:', error);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({ 
         error: error.message || 'Internal server error' 
       })
