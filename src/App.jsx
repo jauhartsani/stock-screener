@@ -146,7 +146,6 @@ const StockAccumulationTracker = () => {
   const fetchMasterData = async (date = null) => {
     setLoading(true);
     try {
-      const supabase = getSupabaseClient();
       let url = `${API_BASE}/get-stocks?limit=5000`;
       
       if (date) {
