@@ -1,4 +1,4 @@
-import { neon } from '@neondatabase/serverless';
+import { neon } from '@netlify/neon';
 
 export const handler = async (event) => {
   if (event.httpMethod !== 'GET') {
@@ -11,8 +11,8 @@ export const handler = async (event) => {
   try {
     const limit = event.queryStringParameters?.limit || 1000;
 
-    // Connect to Neon
-    const sql = neon(process.env.DATABASE_URL);
+    // Connect to Neon - otomatis pakai NETLIFY_DATABASE_URL
+    const sql = neon();
 
     // Query data
     const data = await sql`
