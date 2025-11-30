@@ -1,10 +1,11 @@
 [build]
-  command = "npm install && npm run build"
+  command = "npm install && cd netlify/functions && npm install && cd ../.. && npm run build"
   functions = "netlify/functions"
   publish = "dist"
 
 [functions]
   node_bundler = "esbuild"
+  external_node_modules = ["@neondatabase/serverless"]
   
 [[redirects]]
   from = "/*"
