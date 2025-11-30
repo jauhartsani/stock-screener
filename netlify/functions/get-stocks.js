@@ -69,27 +69,3 @@ exports.handler = async (event) => {
     };
   }
 };
-```
-
-## **Fitur yang sudah ditambahkan:**
-
-✅ **Tab tanggal horizontal** - Scroll horizontal untuk banyak tanggal  
-✅ **Filter by date** - Klik tanggal untuk filter data  
-✅ **Active state** - Tanggal yang dipilih highlighted biru  
-✅ **Auto-select latest** - Tanggal terbaru otomatis dipilih  
-✅ **Organized display** - Data terorganisir per tanggal upload
-
-## **Tampilan:**
-```
-Master Data
-[Refresh Button]
-
-Filter by Tanggal Upload:
-┌──────────────────────────────────────────┐
-│ [21 Jan 2025] [22 Jan 2025] [23 Jan 2025] → scroll
-└──────────────────────────────────────────┘
-
-Menampilkan data untuk: 21 Jan 2025
-┌─────────────────────────────────────┐
-│         Tabel data saham            │
-└─────────────────────────────────────┘
