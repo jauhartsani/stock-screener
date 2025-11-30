@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, TrendingUp, TrendingDown, AlertCircle, Database, BarChart3 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -12,9 +12,32 @@ const StockAccumulationTracker = () => {
   const [masterData, setMasterData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // API endpoint untuk Netlify Functions
   const API_BASE = '/.netlify/functions';
+
+  // Auto-load data saat pertama kali component dimount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        // Check if data exists in database
+        const response = await fetch(`${API_BASE}/get-stocks?limit=10`);
+        const result = await response.json();
+        
+        if (response.ok && result.data && result.data.length > 0) {
+          // Data ada, auto analyze
+          await analyzeStocks();
+        }
+      } catch (error) {
+        console.log('No initial data or error loading:', error);
+      } finally {
+        setIsInitialLoad(false);
+      }
+    };
+
+    loadInitialData();
+  }, []); // Run once on mount
 
   // Parse CSV data
   const parseCSV = (text) => {
@@ -308,6 +331,18 @@ const StockAccumulationTracker = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Loading Overlay saat initial load */}
+        {isInitialLoad && (
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-slate-800 rounded-xl p-8 shadow-2xl">
+              <div className="flex flex-col items-center gap-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
+                <p className="text-white font-semibold">Loading data...</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
@@ -348,9 +383,9 @@ const StockAccumulationTracker = () => {
             Upload Data
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               setActiveTab('master');
-              if (masterData.length === 0) fetchMasterData();
+              if (masterData.length === 0) await fetchMasterData();
             }}
             className={`px-6 py-3 rounded-lg font-semibold transition-all ${
               activeTab === 'master'
