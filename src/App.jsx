@@ -10,6 +10,8 @@ const StockAccumulationTracker = () => {
   const [accumulationStocks, setAccumulationStocks] = useState([]);
   const [distributionStocks, setDistributionStocks] = useState([]);
   const [masterData, setMasterData] = useState([]);
+  const [availableDates, setAvailableDates] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -141,10 +143,17 @@ const StockAccumulationTracker = () => {
   };
 
   // Fetch master data
-  const fetchMasterData = async () => {
+  const fetchMasterData = async (date = null) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/get-stocks?limit=5000`);
+      const supabase = getSupabaseClient();
+      let url = `${API_BASE}/get-stocks?limit=5000`;
+      
+      if (date) {
+        url += `&date=${date}`;
+      }
+      
+      const response = await fetch(url);
       const result = await response.json();
       
       if (!response.ok) {
@@ -157,6 +166,28 @@ const StockAccumulationTracker = () => {
       alert('Error saat mengambil data: ' + error.message);
     }
     setLoading(false);
+  };
+
+  // Fetch available dates
+  const fetchAvailableDates = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/get-dates`);
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch dates');
+      }
+
+      const dates = result.dates || [];
+      setAvailableDates(dates);
+      
+      // Set tanggal terbaru sebagai default
+      if (dates.length > 0 && !selectedDate) {
+        setSelectedDate(dates[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching dates:', error);
+    }
   };
 
   // Analisis akumulasi dan distribusi
@@ -306,6 +337,7 @@ const StockAccumulationTracker = () => {
       
       if (successCount > 0) {
         alert(`Berhasil upload ${successCount} file dengan total ${totalRecords} records!`);
+        await fetchAvailableDates(); // Update list tanggal
         await fetchMasterData();
       }
     } catch (error) {
@@ -385,7 +417,8 @@ const StockAccumulationTracker = () => {
           <button
             onClick={async () => {
               setActiveTab('master');
-              if (masterData.length === 0) await fetchMasterData();
+              if (availableDates.length === 0) await fetchAvailableDates();
+              if (masterData.length === 0) await fetchMasterData(selectedDate);
             }}
             className={`px-6 py-3 rounded-lg font-semibold transition-all ${
               activeTab === 'master'
@@ -482,7 +515,10 @@ const StockAccumulationTracker = () => {
                 <h2 className="text-2xl font-bold text-white">Master Data</h2>
               </div>
               <button
-                onClick={fetchMasterData}
+                onClick={() => {
+                  fetchAvailableDates();
+                  fetchMasterData(selectedDate);
+                }}
                 disabled={loading}
                 className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold transition-all disabled:opacity-50"
               >
@@ -490,53 +526,85 @@ const StockAccumulationTracker = () => {
               </button>
             </div>
 
+            {/* Date Filter */}
+            {availableDates.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-slate-300 font-semibold mb-3">Filter by Tanggal Upload:</h3>
+                <div className="overflow-x-auto pb-2">
+                  <div className="flex gap-2 min-w-max">
+                    {availableDates.map((date, idx) => (
+                      <button
+                        key={idx}
+                        onClick={async () => {
+                          setSelectedDate(date);
+                          await fetchMasterData(date);
+                        }}
+                        className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-all ${
+                          selectedDate === date
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {formatDate(date)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {masterData.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 Belum ada data. Upload data terlebih dahulu.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-slate-700 text-slate-300">
-                    <tr>
-                      <th className="px-4 py-3">Tanggal</th>
-                      <th className="px-4 py-3">Kode</th>
-                      <th className="px-4 py-3">Nama Perusahaan</th>
-                      <th className="px-4 py-3">Open</th>
-                      <th className="px-4 py-3">High</th>
-                      <th className="px-4 py-3">Low</th>
-                      <th className="px-4 py-3">Close</th>
-                      <th className="px-4 py-3">Volume</th>
-                      <th className="px-4 py-3">Foreign Buy</th>
-                      <th className="px-4 py-3">Foreign Sell</th>
-                      <th className="px-4 py-3">Foreign Net</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {masterData.slice(0, 100).map((record, idx) => (
-                      <tr key={idx} className="border-b border-slate-700 hover:bg-slate-700/50">
-                        <td className="px-4 py-3 text-slate-300">{formatDate(record.tanggal)}</td>
-                        <td className="px-4 py-3 text-white font-semibold">{record.kode_saham}</td>
-                        <td className="px-4 py-3 text-slate-300 max-w-xs truncate">{record.nama_perusahaan}</td>
-                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.open_price)}</td>
-                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.tertinggi)}</td>
-                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.terendah)}</td>
-                        <td className="px-4 py-3 text-white font-semibold">{formatNumber(record.penutupan)}</td>
-                        <td className="px-4 py-3 text-slate-300">{formatNumber(record.volume)}</td>
-                        <td className="px-4 py-3 text-green-400">{formatNumber(record.foreign_buy)}</td>
-                        <td className="px-4 py-3 text-red-400">{formatNumber(record.foreign_sell)}</td>
-                        <td className={`px-4 py-3 font-semibold ${record.foreign_net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {record.foreign_net >= 0 ? '+' : ''}{formatNumber(record.foreign_net)}
-                        </td>
+              <div>
+                <div className="mb-4 text-slate-300">
+                  Menampilkan data untuk: <span className="text-white font-semibold">{selectedDate ? formatDate(selectedDate) : 'Semua tanggal'}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-slate-700 text-slate-300">
+                      <tr>
+                        <th className="px-4 py-3">Tanggal</th>
+                        <th className="px-4 py-3">Kode</th>
+                        <th className="px-4 py-3">Nama Perusahaan</th>
+                        <th className="px-4 py-3">Open</th>
+                        <th className="px-4 py-3">High</th>
+                        <th className="px-4 py-3">Low</th>
+                        <th className="px-4 py-3">Close</th>
+                        <th className="px-4 py-3">Volume</th>
+                        <th className="px-4 py-3">Foreign Buy</th>
+                        <th className="px-4 py-3">Foreign Sell</th>
+                        <th className="px-4 py-3">Foreign Net</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {masterData.length > 100 && (
-                  <div className="text-center mt-4 text-slate-400 text-sm">
-                    Menampilkan 100 dari {masterData.length} records
-                  </div>
-                )}
+                    </thead>
+                    <tbody>
+                      {masterData.slice(0, 100).map((record, idx) => (
+                        <tr key={idx} className="border-b border-slate-700 hover:bg-slate-700/50">
+                          <td className="px-4 py-3 text-slate-300">{formatDate(record.tanggal)}</td>
+                          <td className="px-4 py-3 text-white font-semibold">{record.kode_saham}</td>
+                          <td className="px-4 py-3 text-slate-300 max-w-xs truncate">{record.nama_perusahaan}</td>
+                          <td className="px-4 py-3 text-slate-300">{formatNumber(record.open_price)}</td>
+                          <td className="px-4 py-3 text-slate-300">{formatNumber(record.tertinggi)}</td>
+                          <td className="px-4 py-3 text-slate-300">{formatNumber(record.terendah)}</td>
+                          <td className="px-4 py-3 text-white font-semibold">{formatNumber(record.penutupan)}</td>
+                          <td className="px-4 py-3 text-slate-300">{formatNumber(record.volume)}</td>
+                          <td className="px-4 py-3 text-green-400">{formatNumber(record.foreign_buy)}</td>
+                          <td className="px-4 py-3 text-red-400">{formatNumber(record.foreign_sell)}</td>
+                          <td className={`px-4 py-3 font-semibold ${record.foreign_net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {record.foreign_net >= 0 ? '+' : ''}{formatNumber(record.foreign_net)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {masterData.length > 100 && (
+                    <div className="text-center mt-4 text-slate-400 text-sm">
+                      Menampilkan 100 dari {masterData.length} records
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
