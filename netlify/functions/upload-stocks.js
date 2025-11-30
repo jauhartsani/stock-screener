@@ -1,7 +1,6 @@
-import { neon } from '@neondatabase/serverless';
+import { neon } from '@netlify/neon';
 
 export const handler = async (event) => {
-  // Only allow POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -19,8 +18,8 @@ export const handler = async (event) => {
       };
     }
 
-    // Connect to Neon using environment variable
-    const sql = neon(process.env.DATABASE_URL);
+    // Connect to Neon - otomatis pakai NETLIFY_DATABASE_URL
+    const sql = neon();
 
     // Insert records with ON CONFLICT DO UPDATE
     for (const record of records) {
